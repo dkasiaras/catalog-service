@@ -1,1 +1,29 @@
-docker run -d --name polar-postgres -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=polardb_catalog -p 5432:5432 postgres:14.3
+docker network create catalog-network
+
+docker run -d 
+--name polar-postgres 
+--net catalog-network 
+-e POSTGRES_USER=user 
+-e POSTGRES_PASSWORD=password 
+-e POSTGRES_DB=polardb_catalog 
+-p 5432:5432 
+postgres:14.3
+
+
+
+docker run -d --name catalog-service --net catalog-network -p 9090:9090 -e SPRING_DATASOURCE_URL=jdbc:postgresql://polar-postgres:5432/polardb_catalog -e SPRING_PROFILES_ACTIVE=testdata catalog-service
+
+
+FROM eclipse-temurin:17 AS builder
+WORKDIR workspace
+ARG JAR_FILE=build/libs/*.jar
+COPY ${JAR_FILE} catalog-service.jar
+RUN java -Djarmode=layertools -jar
+catalog-service.jar extract
+FROM eclipse-temurin:17
+WORKDIR workspace
+COPY --from=builder workspace/dependencies/ ./
+COPY --from=builder workspace/spring-boot-loader/ ./
+COPY --from=builder workspace/snapshot-dependencies/ ./
+COPY --from=builder workspace/application/ ./
+ENTRYPOINT ["java","org.springframework.boot.loader.JarLauncher"]
